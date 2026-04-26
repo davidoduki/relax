@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Vazirmatn:wght@300;400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --crimson: #8B1A1A;
+  --gold: #C9A227;
+  --navy: #0D1B2A;
+  --ivory: #F5ECD7;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-navy-900 text-ivory-100 font-cormorant;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(139, 26, 26, 0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(201, 162, 39, 0.05) 0%, transparent 50%);
+  }
+
+  /* Arabesque pattern overlay on body */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%23C9A227' fill-opacity='1'%3E%3Cpath d='M40 0 L50 15 L40 10 L30 15 Z'/%3E%3Cpath d='M40 80 L50 65 L40 70 L30 65 Z'/%3E%3Cpath d='M0 40 L15 50 L10 40 L15 30 Z'/%3E%3Cpath d='M80 40 L65 50 L70 40 L65 30 Z'/%3E%3Ccircle cx='40' cy='40' r='8' fill='none' stroke='%23C9A227' stroke-width='1'/%3E%3Cpath d='M40 20 Q55 32 40 40 Q25 32 40 20Z' fill='none' stroke='%23C9A227' stroke-width='0.5'/%3E%3Cpath d='M40 60 Q55 48 40 40 Q25 48 40 60Z' fill='none' stroke='%23C9A227' stroke-width='0.5'/%3E%3Cpath d='M20 40 Q32 55 40 40 Q32 25 20 40Z' fill='none' stroke='%23C9A227' stroke-width='0.5'/%3E%3Cpath d='M60 40 Q48 55 40 40 Q48 25 60 40Z' fill='none' stroke='%23C9A227' stroke-width='0.5'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 80px 80px;
+  }
+
+  * {
+    @apply relative z-10;
+  }
+
+  body::before {
+    z-index: 0;
+  }
+}
+
+@layer components {
+  .gold-border {
+    @apply border border-gold-700/30;
+  }
+
+  .glass-card {
+    @apply bg-navy-800/60 backdrop-blur-sm border border-gold-800/20 rounded-2xl;
+  }
+
+  .tag-pill {
+    @apply text-xs px-2.5 py-0.5 rounded-full bg-crimson-900/60 text-gold-400
+           border border-crimson-700/40 font-vazirmatn hover:bg-crimson-800/70 transition-colors cursor-pointer;
+  }
+
+  .btn-gold {
+    @apply px-5 py-2.5 rounded-xl bg-gold-600 text-navy-900 font-semibold text-sm
+           hover:bg-gold-500 active:bg-gold-700 transition-colors duration-200 font-cormorant;
+  }
+
+  .btn-ghost {
+    @apply px-5 py-2.5 rounded-xl border border-gold-700/40 text-gold-400
+           hover:border-gold-600/60 hover:text-gold-300 transition-colors duration-200 font-cormorant;
+  }
+
+  .section-title {
+    @apply text-3xl font-cormorant font-light text-ivory-100 tracking-wide;
+  }
+}
+
+/* Waveform bars */
+.waveform-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  animation: wave var(--dur, 1.2s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(0.4); }
+  50% { transform: scaleY(1); }
+}
+
+/* RTL support for Persian text */
+[dir='rtl'] {
+  font-family: 'Vazirmatn', Arial, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0D1B2A;
+}
+::-webkit-scrollbar-thumb {
+  background: #8B1A1A;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C9A227;
+}

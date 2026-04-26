@@ -1,5 +1,6 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
+import { fetchAllVideos, normalizeTikTokVideo, refreshAccessToken } from './lib/tiktok.js';
 
 const app = express();
 app.use(express.json());
@@ -49,20 +50,81 @@ function extractEmbedUrl(url) {
   return match ? `https://www.tiktok.com/embed/v2/${match[1]}` : url;
 }
 
+// ─── TikTok sync ────────────────────────────────────────────────────────────
+
+/**
+ * Pull all videos from TikTok API and upsert into Supabase.
+ * Returns { saved, skipped, error? }
+ */
+async function syncFromTikTok() {
+  const token = process.env.TIKTOK_ACCESS_TOKEN;
+  if (!token) {
+    return { saved: 0, skipped: 0, error: 'TIKTOK_ACCESS_TOKEN not set' };
+  }
+
+  let accessToken = token;
+
+  // Try fetch; if 401, attempt token refresh once
+  let videos;
+  try {
+    videos = await fetchAllVideos(accessToken);
+  } catch (err) {
+    if (err.message.includes('401') && process.env.TIKTOK_CLIENT_KEY) {
+      console.log('TikTok token expired — refreshing...');
+      try {
+        const refreshed = await refreshAccessToken();
+        accessToken = refreshed.access_token;
+        console.log('Token refreshed. New token starts with:', accessToken.slice(0, 8) + '…');
+        videos = await fetchAllVideos(accessToken);
+      } catch (refreshErr) {
+        return { saved: 0, skipped: 0, error: `Token refresh failed: ${refreshErr.message}` };
+      }
+    } else {
+      return { saved: 0, skipped: 0, error: err.message };
+    }
+  }
+
+  if (!videos.length) {
+    return { saved: 0, skipped: 0 };
+  }
+
+  const rows = videos.map(v => {
+    const base = normalizeTikTokVideo(v);
+    const combined = `${base.title ?? ''} ${base.description ?? ''}`;
+    return { ...base, tags: extractTags(combined) };
+  });
+
+  const { error } = await supabase
+    .from('videos')
+    .upsert(rows, { onConflict: 'tiktok_url' });
+
+  if (error) {
+    return { saved: 0, skipped: 0, error: `Supabase error: ${error.message}` };
+  }
+
+  console.log(`✅ TikTok sync: ${rows.length} videos upserted`);
+  return { saved: rows.length, skipped: 0 };
+}
+
+// ─── Routes ─────────────────────────────────────────────────────────────────
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Persian Music Server 🎵' });
+  res.json({
+    status: 'ok',
+    service: 'Persian Music Server 🎵',
+    tiktok_configured: !!process.env.TIKTOK_ACCESS_TOKEN,
+    supabase_configured: !!process.env.SUPABASE_URL,
+  });
 });
 
+// Webhook — called by Zapier/Make when a new TikTok is posted
 app.post('/webhook/new-video', async (req, res) => {
   if (req.headers['x-webhook-secret'] !== process.env.WEBHOOK_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const { title, url, thumbnail, description, published_at } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ error: 'Missing required field: url' });
-  }
+  if (!url) return res.status(400).json({ error: 'Missing required field: url' });
 
   const tiktok_url = extractEmbedUrl(url);
   const combined = `${title ?? ''} ${description ?? ''}`;
@@ -78,11 +140,28 @@ app.post('/webhook/new-video', async (req, res) => {
     return res.status(500).json({ error: 'Database error' });
   }
 
-  console.log(`✅ Saved: ${title}`);
+  console.log(`✅ Webhook saved: ${title}`);
   return res.status(200).json({ success: true });
 });
 
-// Manual seed endpoint — protected, for backfilling existing videos
+// Manual full sync from TikTok API — protected
+app.post('/admin/sync-tiktok', async (req, res) => {
+  if (req.headers['x-webhook-secret'] !== process.env.WEBHOOK_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  console.log('🔄 Manual TikTok sync triggered...');
+  const result = await syncFromTikTok();
+
+  if (result.error) {
+    console.error('Sync error:', result.error);
+    return res.status(500).json({ error: result.error });
+  }
+
+  return res.status(200).json({ success: true, ...result });
+});
+
+// Manual seed endpoint — for backfilling from JSON
 app.post('/admin/seed', async (req, res) => {
   if (req.headers['x-webhook-secret'] !== process.env.WEBHOOK_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -112,5 +191,22 @@ app.post('/admin/seed', async (req, res) => {
   return res.status(200).json({ success: true, count: rows.length });
 });
 
+// ─── Startup ─────────────────────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`🎵 Persian Music Server running on port ${PORT}`));
+app.listen(PORT, async () => {
+  console.log(`🎵 Persian Music Server running on port ${PORT}`);
+
+  // Auto-sync from TikTok on startup if credentials are present
+  if (process.env.TIKTOK_ACCESS_TOKEN) {
+    console.log('🔄 Auto-syncing TikTok videos on startup...');
+    const result = await syncFromTikTok();
+    if (result.error) {
+      console.error('Startup sync error:', result.error);
+    } else {
+      console.log(`Startup sync complete: ${result.saved} videos`);
+    }
+  } else {
+    console.log('ℹ️  TIKTOK_ACCESS_TOKEN not set — skipping auto-sync');
+  }
+});
